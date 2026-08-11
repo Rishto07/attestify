@@ -36,7 +36,7 @@
 - [ ] VS Code extension
 - [ ] GitHub Action
 - [ ] GitLab CI template
-- [ ] Pre-commit hook
+- [x] Pre-commit hook (`verdict hook install`)
 
 ## v0.5.0 — Community
 
