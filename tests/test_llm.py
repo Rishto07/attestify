@@ -46,20 +46,19 @@ class TestExtractJson:
 
 
 class TestGetLlm:
-    def test_defaults_to_mock(self):
+    def _clean_cwd(self, tmp_path, monkeypatch):
+        """chdir to a dir with no .env and scrub LLM vars, so get_llm()
+        cannot pick up the developer's real .env from the repo root."""
+        monkeypatch.chdir(tmp_path)
+        for var in ("VERDICT_LLM_URL", "VERDICT_LLM_KEY", "VERDICT_LLM_MODEL", "VERDICT_LLM_PROVIDER"):
+            monkeypatch.delenv(var, raising=False)
+
+    def test_defaults_to_mock(self, tmp_path, monkeypatch):
+        self._clean_cwd(tmp_path, monkeypatch)
         llm = get_llm()
         assert isinstance(llm, MockLLM)
 
-    def test_returns_mock_when_no_env(self):
-        import os
-        # Make sure no env vars are set
-        orig_url = os.environ.pop("VERDICT_LLM_URL", None)
-        orig_provider = os.environ.pop("VERDICT_LLM_PROVIDER", None)
-        try:
-            llm = get_llm()
-            assert isinstance(llm, MockLLM)
-        finally:
-            if orig_url:
-                os.environ["VERDICT_LLM_URL"] = orig_url
-            if orig_provider:
-                os.environ["VERDICT_LLM_PROVIDER"] = orig_provider
+    def test_returns_mock_when_no_env(self, tmp_path, monkeypatch):
+        self._clean_cwd(tmp_path, monkeypatch)
+        llm = get_llm()
+        assert isinstance(llm, MockLLM)

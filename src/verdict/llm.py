@@ -88,11 +88,12 @@ class OpenAIClient(VerdictLLM):
         self,
         base_url: str | None = None,
         api_key: str | None = None,
-        timeout: float = 60.0,
+        timeout: float | None = None,
     ) -> None:
         self.base_url = (base_url or self._env("VERDICT_LLM_URL", "https://api.openai.com/v1")).rstrip("/")
         self.api_key = api_key or self._env("VERDICT_LLM_KEY", "")
-        self.timeout = timeout
+        # Free-tier models are slow to reason; default 120s, overridable.
+        self.timeout = timeout if timeout is not None else float(self._env("VERDICT_LLM_TIMEOUT", "120"))
 
     @staticmethod
     def _env(name: str, default: str) -> str:
@@ -107,6 +108,13 @@ class OpenAIClient(VerdictLLM):
         temperature: float = 0.0,
         max_tokens: int = 2048,
     ) -> LLMResult:
+        """Run a completion with retry on transient errors.
+
+        Free-tier and shared proxies are flaky (5xx, 429, timeouts). We retry
+        a few times with short backoff; auth/validation failures fail fast.
+        """
+        import time
+
         model = model or self._env("VERDICT_LLM_MODEL", "gpt-4o-mini")
         url = f"{self.base_url}/chat/completions"
         payload = {
@@ -115,13 +123,33 @@ class OpenAIClient(VerdictLLM):
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+
+        last_exc: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                return self._complete_once(url, payload, model)
+            except (RateLimitError, LLMError, TimeoutError) as e:
+                # Retry transient errors; let auth/validation raise immediately.
+                if isinstance(e, AuthError):
+                    raise
+                last_exc = e
+                if attempt < 3:
+                    time.sleep(attempt * 2.0)  # 2s, 4s backoff
+        raise last_exc or LLMError("LLM request failed after retries")
+
+    def _complete_once(self, url: str, payload: dict, model: str) -> LLMResult:
+        """Single HTTP request — no retries. Shared by complete()."""
+        import time
+
         headers = {
             "Content-Type": "application/json",
+            # Cloudflare-backed proxies block the bare Python-urllib UA.
+            # Send a real one; some providers refuse suspicious fingerprints.
+            "User-Agent": "verdict-cli/0.1 (trust-layer)",
+            "Accept": "application/json",
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-
-        import time
 
         start = time.perf_counter()
         try:
@@ -143,9 +171,26 @@ class OpenAIClient(VerdictLLM):
             raise LLMError(f"Connection failed: {e.reason}") from e
 
         latency = (time.perf_counter() - start) * 1000
-        choice = data["choices"][0]
+
+        # Some proxies return 200 with an error-shaped body ({"error": {...}})
+        # when the upstream provider fails. Surface that, not a confusing KeyError.
+        if "error" in data and isinstance(data.get("error"), dict):
+            err = data["error"]
+            raise LLMError(
+                f"provider error: {err.get('type', 'unknown')}: {err.get('message', '')[:300]}"
+            )
+
+        choices = data.get("choices")
+        if not choices:
+            raise LLMError(f"provider returned no choices: {json.dumps(data)[:300]}")
+
+        choice = choices[0]
+        content = choice.get("message", {}).get("content")
+        if not content:
+            raise LLMError(f"provider returned empty content: finish={choice.get('finish_reason')}")
+
         return LLMResult(
-            text=choice["message"]["content"],
+            text=content,
             model=data.get("model", model),
             finish_reason=choice.get("finish_reason"),
             usage=data.get("usage"),

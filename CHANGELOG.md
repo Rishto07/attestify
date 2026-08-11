@@ -30,3 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--sandbox {auto,docker,subprocess}` CLI flag on `check` and `execute`
   - Received evidence now records `sandbox` name and `isolated` flag
 - Sandbox test suite (Docker flood, fallback behavior, timeout mapping, command hardening)
+- **LLM client hardening**: retry with backoff on transient 5xx/429, graceful provider-error surfacing, configurable timeout via `VERDICT_LLM_TIMEOUT`
+- Cloudflare User-Agent bypass (Python-urllib UA was being blocked)

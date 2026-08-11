@@ -94,15 +94,28 @@ print(result.summary)    # human-readable summary
 
 ### With LLM (Prosecutor)
 
+The Prosecutor is an adversarial judge: a separate model pass whose only job is to *try to prove the answer wrong*. It's what catches confident hallucinations.
+
 ```bash
-# Set up an LLM for adversarial checking
-export VERDICT_LLM_URL=http://localhost:11434/v1
-export VERDICT_LLM_KEY=ollama
-export VERDICT_LLM_MODEL=llama3
+# Set up your model in .env (see .env.example):
+#   VERDICT_LLM_URL=https://api.openai.com/v1   (or any OpenAI-compatible proxy)
+#   VERDICT_LLM_KEY=sk-...
+#   VERDICT_LLM_MODEL=gpt-4o-mini
 
 # Run with prosecutor
 verdict check --prosecutor "Your AI output"
 ```
+
+Live example:
+
+```bash
+$ verdict check --prosecutor "The Eiffel Tower was completed in 1899 and stands 450 meters tall in downtown London."
+  [FAIL] prosecutor: REFUTED: 4 challenge(s) found. All four factual claims are incorrect:
+          wrong completion year, wrong height, wrong city, and designer attribution.
+VERDICT: FAIL
+```
+
+The judge is model-agnostic, retries transient proxy errors, and times out generously for slow free-tier models.
 
 ## Architecture
 
