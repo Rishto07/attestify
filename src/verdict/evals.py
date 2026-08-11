@@ -299,17 +299,32 @@ def run_all(data_dir: Optional[Path] = None, verbose: bool = False) -> list[Metr
 def run_prosecutor_eval(
     data_dir: Optional[Path] = None,
     verbose: bool = False,
+    limit: Optional[int] = None,
 ) -> MetricResult:
     """Run the prosecutor dataset against the configured LLM.
 
     This is the number that earns trust for the adversarial judge: how often
     it correctly refutes false claims and correctly verifies true ones.
+
+    Args:
+        limit: Cap the number of claims judged (each real LLM call is slow).
+               Use for a fast signal; nil runs the whole corpus.
     """
     datasets = load_all_datasets(data_dir)
     try:
         ds = next(d for d in datasets if d.metric == "agreement")
     except StopIteration:
         raise EvalError("no prosecutor (agreement) dataset found in corpus")
+
+    if limit:
+        # Balance true/false so a subset isn't skewed: take limit/2 of each.
+        from dataclasses import replace
+
+        truths = [c for c in ds.cases if c.truth is True]
+        falses = [c for c in ds.cases if c.truth is False]
+        half = max(1, limit // 2)
+        limited = tuple(truths[:half] + falses[:half])
+        ds = replace(ds, cases=limited)
 
     llm = get_llm()
     ctx = CheckContext(timeout=120.0, llm=llm, model=None, sandbox=SubprocessSandbox())
@@ -370,12 +385,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--verbose", action="store_true", help="Show per-case results")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a human report")
     parser.add_argument("--data-dir", type=Path, default=None, help="Override the corpus directory")
+    parser.add_argument("--limit", type=int, default=None, help="Cap prosecutor claims judged (fast signal)")
     args = parser.parse_args(argv)
 
     try:
         results = run_all(args.data_dir, verbose=args.verbose)
         if args.prosecutor:
-            results.append(run_prosecutor_eval(args.data_dir, verbose=args.verbose))
+            results.append(run_prosecutor_eval(args.data_dir, verbose=args.verbose, limit=args.limit))
     except EvalError as e:
         print(f"eval error: {e}", file=sys.stderr)
         return 1

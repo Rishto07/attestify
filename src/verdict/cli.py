@@ -322,6 +322,7 @@ def main():
     evals_parser.add_argument("--verbose", action="store_true", help="Show per-case results")
     evals_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a human report")
     evals_parser.add_argument("--data-dir", type=Path, default=None, help="Override the corpus directory")
+    evals_parser.add_argument("--limit", type=int, default=None, help="Cap prosecutor claims judged (fast signal; real LLM calls are slow)")
     evals_parser.set_defaults(func=lambda a: _run_evals(a))
 
     args = parser.parse_args()
@@ -341,6 +342,8 @@ def _run_evals(args: argparse.Namespace) -> int:
         argv.append("--json")
     if args.data_dir:
         argv += ["--data-dir", str(args.data_dir)]
+    if getattr(args, "limit", None):
+        argv += ["--limit", str(args.limit)]
     return evals_main(argv)
 
 
