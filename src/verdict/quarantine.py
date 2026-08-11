@@ -56,7 +56,11 @@ _SHELL_INJECTION_PATTERNS = [
     (r"\bwget\b[^\n]*\|\s*(?:bash|sh|zsh)\b", "wget-pipe", Severity.CRITICAL),
     (r"\bfetch\b[^\n]*\|\s*(?:bash|sh|zsh)\b", "fetch-pipe", Severity.CRITICAL),
     (r"\|\s*(?:bash|sh|zsh)\s+-\s*[c]", "pipe-to-shell", Severity.HIGH),
-    (r">\s*/(?:dev/|proc/|sys/|etc/|root/)", "write-system-path", Severity.CRITICAL),
+    # Writing to system dirs. Deliberately EXCLUDES /dev/null, /dev/stdout,
+    # /dev/stderr, /dev/fd — discarding output is ubiquitous and benign.
+    # /dev/tcp/... is a bash exfil vector, kept as its own critical rule.
+    (r">\s*/(?:proc/|sys/|etc/|root/)", "write-system-path", Severity.CRITICAL),
+    (r">\s*/dev/tcp/", "dev-tcp-exfil", Severity.CRITICAL),
     (r"\$\([^)]+\)\s*\|\s*(?:bash|sh)", "command-subst-pipe", Severity.HIGH),
     (r"`[^`]+`\s*\|\s*(?:bash|sh)", "backtick-pipe", Severity.HIGH),
     (r"\brm\s+-[r]+f?\s+/(?:\s|$)", "destructive-rm", Severity.CRITICAL),

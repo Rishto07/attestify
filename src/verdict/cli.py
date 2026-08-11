@@ -316,6 +316,18 @@ def main():
     hist_parser.add_argument("-n", type=int, default=10, help="Number of receipts to show")
     hist_parser.set_defaults(func=cmd_history)
 
+    # verdict diff-check
+    diff_parser = subparsers.add_parser("diff-check", help="Scan staged changes for dangerous patterns (used by the pre-commit hook)")
+    diff_parser.add_argument("--json", action="store_true", help="Emit findings as JSON instead of blocks")
+    diff_parser.set_defaults(func=cmd_diff_check)
+
+    # verdict hook
+    hook_parser = subparsers.add_parser("hook", help="Manage the git pre-commit hook")
+    hook_sub = hook_parser.add_subparsers(dest="hook_cmd", required=True)
+    hook_sub.add_parser("install", help="Install the pre-commit hook").set_defaults(hook_func=cmd_hook_install)
+    hook_sub.add_parser("uninstall", help="Remove the pre-commit hook").set_defaults(hook_func=cmd_hook_uninstall)
+    hook_sub.add_parser("status", help="Show hook state").set_defaults(hook_func=cmd_hook_status)
+
     # verdict evals
     evals_parser = subparsers.add_parser("evals", help="Run the evaluation corpus and report metrics")
     evals_parser.add_argument("--prosecutor", action="store_true", help="Also run the prosecutor judge-reliability eval (uses .env LLM)")
@@ -326,7 +338,66 @@ def main():
     evals_parser.set_defaults(func=lambda a: _run_evals(a))
 
     args = parser.parse_args()
-    return args.func(args)
+
+    # `verdict hook <sub>` dispatches on hook_func; everything else on func.
+    handler = getattr(args, "hook_func", None) or getattr(args, "func", None)
+    if handler is None:
+        parser.print_usage()
+        return 2
+    return handler(args)
+
+
+def cmd_diff_check(args: argparse.Namespace) -> int:
+    """Scan the staged diff for dangerous patterns."""
+    from .gitcheck import _run_diffcheck
+
+    if getattr(args, "json", False):
+        from .gitcheck import scan_staged_changes
+
+        try:
+            result = scan_staged_changes()
+        except Exception as e:  # noqa: BLE001 — report and continue
+            import json as _json
+
+            print(_json.dumps({"error": str(e)}))
+            return 0
+        import json as _json
+
+        print(_json.dumps({
+            "added_lines": result.added_lines,
+            "files": result.files,
+            "dangerous": result.dangerous,
+            "findings": [
+                {"severity": f.severity.value, "category": f.category, "detail": f.detail, "location": f.location}
+                for f in result.findings
+            ],
+        }, indent=2))
+        return 2 if result.dangerous else 0
+
+    return _run_diffcheck()
+
+
+def cmd_hook_install(args: argparse.Namespace) -> int:
+    from .hooks import install
+
+    try:
+        installed = install()
+        return 0 if installed else 1
+    except RuntimeError as e:
+        print(f"verdict: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_hook_uninstall(args: argparse.Namespace) -> int:
+    from .hooks import uninstall
+
+    return 0 if uninstall() else 1
+
+
+def cmd_hook_status(args: argparse.Namespace) -> int:
+    from .hooks import status
+
+    return status()
 
 
 def _run_evals(args: argparse.Namespace) -> int:
