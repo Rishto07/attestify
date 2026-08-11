@@ -316,8 +316,32 @@ def main():
     hist_parser.add_argument("-n", type=int, default=10, help="Number of receipts to show")
     hist_parser.set_defaults(func=cmd_history)
 
+    # verdict evals
+    evals_parser = subparsers.add_parser("evals", help="Run the evaluation corpus and report metrics")
+    evals_parser.add_argument("--prosecutor", action="store_true", help="Also run the prosecutor judge-reliability eval (uses .env LLM)")
+    evals_parser.add_argument("--verbose", action="store_true", help="Show per-case results")
+    evals_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a human report")
+    evals_parser.add_argument("--data-dir", type=Path, default=None, help="Override the corpus directory")
+    evals_parser.set_defaults(func=lambda a: _run_evals(a))
+
     args = parser.parse_args()
     return args.func(args)
+
+
+def _run_evals(args: argparse.Namespace) -> int:
+    """Runs the eval corpus. Kept as a small adapter so main() stays tidy."""
+    from .evals import main as evals_main
+
+    argv = []
+    if args.prosecutor:
+        argv.append("--prosecutor")
+    if args.verbose:
+        argv.append("--verbose")
+    if args.json:
+        argv.append("--json")
+    if args.data_dir:
+        argv += ["--data-dir", str(args.data_dir)]
+    return evals_main(argv)
 
 
 if __name__ == "__main__":

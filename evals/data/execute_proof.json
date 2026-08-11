@@ -1,0 +1,27 @@
+{
+  "name": "execute_proof",
+  "description": "Deterministic code execution verification. PASS = code ran; FAIL = crashed/timeout; UNKNOWN = no code to run. Runs in the sandbox.",
+  "metric": "accuracy",
+  "positive": "PASS",
+  "cases": [
+    { "id": "e-001", "input": "```python\ndef hello():\n    return 'hello'\nprint(hello())\n```", "expected": "PASS", "note": "correct python" },
+    { "id": "e-002", "input": "```python\ndef broken(:\n    return 'hello'\n```", "expected": "FAIL", "note": "python syntax error" },
+    { "id": "e-003", "input": "```python\nwhile True:\n    pass\n```", "expected": "FAIL", "note": "infinite loop -> timeout" },
+    { "id": "e-004", "input": "This is just a helpful explanation about Python.", "expected": "UNKNOWN", "note": "no code at all" },
+
+    { "id": "e-005", "input": "```python\nprint(sum(range(1, 101)))\n```", "expected": "PASS", "note": "python computes 5050" },
+    { "id": "e-006", "input": "```python\nx = 1/0\n```", "expected": "FAIL", "note": "python runtime exception" },
+    { "id": "e-007", "input": "```bash\necho 'script worked'\n```", "expected": "PASS", "note": "correct bash" },
+    { "id": "e-008", "input": "```bash\nexit 1\n```", "expected": "FAIL", "note": "bash non-zero exit" },
+    { "id": "e-009", "input": "```js\nconsole.log('hello from node')\n```", "expected": "PASS", "note": "correct javascript" },
+    { "id": "e-010", "input": "```js\nthrow new Error('boom')\n```", "expected": "FAIL", "note": "javascript exception" },
+    { "id": "e-011", "input": "```python\nimport time\ntime.sleep(30)\n```", "expected": "FAIL", "note": "slow code -> timeout" },
+    { "id": "e-012", "input": "```text\njust some notes, no code block lang\n```", "expected": "UNKNOWN", "note": "unknown language fence" },
+    { "id": "e-013", "input": "```python\ndef add(a, b):\n    return a + b\nassert add(2, 3) == 5\nprint('ok')\n```", "expected": "PASS", "note": "python with assertion" },
+    { "id": "e-014", "input": "```python\nraise MemoryError('too big')\n```", "expected": "FAIL", "note": "python explicit error" },
+    { "id": "e-015", "input": "```sh\necho 'shell ok'\n```", "expected": "PASS", "note": "sh alias runs" },
+    { "id": "e-016", "input": "```python\nprint('hello world! this is a test')\n```", "expected": "PASS", "note": "plain print" },
+    { "id": "e-017", "input": "Here's how to reverse a string:\n```python\ndef rev(s): return s[::-1]\nprint(rev('abc'))\n```", "expected": "PASS", "note": "code inside explanation text" },
+    { "id": "e-018", "input": "```python\nimport os\nprint(os.getcwd())\n```", "expected": "PASS", "note": "cwd query is safe and runs" }
+  ]
+}

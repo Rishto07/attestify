@@ -59,17 +59,22 @@ _SHELL_INJECTION_PATTERNS = [
     (r">\s*/(?:dev/|proc/|sys/|etc/|root/)", "write-system-path", Severity.CRITICAL),
     (r"\$\([^)]+\)\s*\|\s*(?:bash|sh)", "command-subst-pipe", Severity.HIGH),
     (r"`[^`]+`\s*\|\s*(?:bash|sh)", "backtick-pipe", Severity.HIGH),
+    (r"\brm\s+-[r]+f?\s+/(?:\s|$)", "destructive-rm", Severity.CRITICAL),
+    (r"\|\s*crontab\s*-", "cron-inject", Severity.CRITICAL),
 ]
 
 # Exfiltration: reading sensitive files and sending them out
 _EXFIL_PATTERNS = [
     (r"cat\s+(?:~/.ssh/|/etc/passwd|/etc/shadow|/root/.aws/|~/.aws/)", "read-sensitive", Severity.CRITICAL),
-    (r"tar\s+[cz].*\s+(?:/home/|/root/|/etc/)", "archive-sensitive", Severity.HIGH),
-    (r"zip\s+.*(?:/home/|/root/|/etc/)", "compress-sensitive", Severity.HIGH),
+    (r"tar\s+[cz].*\s+(?:/home/|/root/|/etc/|~/.aws/)", "archive-sensitive", Severity.HIGH),
+    (r"zip\s+.*(?:/home/|/root/|/etc/|~/.aws/)", "compress-sensitive", Severity.HIGH),
     (r"(?:curl|wget|fetch)\s+.*(?:&&|,)\s*(?:cat|base64)\s+", "exfil-via-network", Severity.CRITICAL),
     (r"\bnc\s+-(?:e|i|exec)\s+\S+", "netcat-reverse", Severity.CRITICAL),
-    (r"(?:python|perl|ruby)\s+-m\s+http\.server.*(?:\s+&|\s+0\.0\.0\.0)", "http-server-expose", Severity.HIGH),
+    (r"(?:python3?|perl|ruby)\s+-m\s+http\.server.*(?:\s+&|\s+0\.0\.0\.0)", "http-server-expose", Severity.HIGH),
     (r"nc\s+-l\s+-p\s+\d+\s*(?:-e|/|)\s*(?:/bin/|bash)", "netcat-listen", Severity.CRITICAL),
+    # python one-liner that both opens a network connection AND reads a file:
+    # the classic exfil shape (socket.connect + open(...).read()).
+    (r"python3?\s+-c\s+['\"][^'\"]*(?:socket\.|urllib\.|http\.).*?(?:open\(|read\()", "python-exfil", Severity.CRITICAL),
 ]
 
 # Persistence: staying on the machine after reboot
@@ -80,19 +85,25 @@ _PERSISTENCE_PATTERNS = [
     (r"crontab\s+-r", "cron-remove", Severity.HIGH),
     (r"crontab\s+<<", "cron-inject", Severity.HIGH),
     (r"(?:systemctl|service)\s+(?:enable|start)\s+\S+", "service-persistence", Severity.MEDIUM),
-    (r"ln\s+-[sT]\s+.*(?:/usr/local/bin|/bin|/sbin)", "symlink-hijack", Severity.MEDIUM),
-    (r"chmod\s+[47]555\s+(?:/usr/|/bin/|/sbin/)", "setuid-root", Severity.CRITICAL),
+    # Symlink hijack: the DESTINATION lives in a system bin dir, e.g.
+    # `ln -s /tmp/evil /usr/bin/x`. A harmless `ln -s /usr/bin /tmp/evil`
+    # (source in system dir) must NOT match.
+    (r"ln\s+-[sT]\s+[^\s]+\s+(?:/usr/local/bin|/usr/bin|/bin|/sbin)", "symlink-hijack", Severity.MEDIUM),
+    # setuid bit: leading octal digit 4 or 6 (setuid/setgid) then rwx bits,
+    # e.g. 4755, 6755. `chmod 755` and `chmod 777` must NOT match.
+    (r"chmod\s+[46][0-7]{3}\s+(?:/usr/|/bin/|/sbin/)", "setuid-root", Severity.CRITICAL),
     (r"chown\s+root:root\s+.*", "chown-root", Severity.HIGH),
 ]
 
 # Obfuscation: hiding what you're doing
 _OBFUSCATION_PATTERNS = [
-    (r"base64\s+-d\s+<<<\s*['\"][A-Za-z0-9+/=]{20,}", "base64-decode-exec", Severity.HIGH),
+    (r"base64\s+-d\s+<<<\s*['\"][A-Za-z0-9+/=]{8,}", "base64-decode-exec", Severity.HIGH),
     (r"echo\s+['\"][A-Za-z0-9+/=]{20,}['\"]\s*\|\s*base64\s+-d", "base64-pipe-exec", Severity.HIGH),
-    (r"python\s+-c\s+['\"][^'\"]*eval\s*\(", "python-eval-injection", Severity.HIGH),
-    (r"perl\s+-e\s+['\"][^'\"]*eval\s*\(", "perl-eval-injection", Severity.HIGH),
-    (r"ruby\s+-e\s+['\"][^'\"]*eval\s*\(", "ruby-eval-injection", Severity.HIGH),
-    (r"sh\s+-c\s+['\"][^'\"]*\$\(", "sh-eval-subst", Severity.MEDIUM),
+    # python -c "..." with eval() or exec() or compile() — arbitrary code exec
+    (r"python3?\s+-c\s+['\"][^'\"]*(?:eval|exec)\s*\(", "python-eval-injection", Severity.HIGH),
+    (r"perl\s+-e\s+['\"][^'\"]*eval\s*(?:\(|\"|')", "perl-eval-injection", Severity.HIGH),
+    (r"ruby\s+-e\s+['\"][^'\"]*eval\s*(?:\(|\"|')", "ruby-eval-injection", Severity.HIGH),
+    (r"sh\s+-c\s+['\"][^'\"]*\$\(", "sh-eval-subst", Severity.HIGH),
     (r"\\x[0-9a-fA-F]{2}", "hex-escape", Severity.LOW),
     (r"\\0[0-9]{2,3}", "octal-escape", Severity.LOW),
 ]
@@ -119,13 +130,10 @@ def _find_all(text: str, detectors: list[tuple[str, str, Severity]]) -> Iterable
             snippet = line_content.strip()[:60]
             location = f"line {line_num}, chars {match.start() - line_start}-{match.end() - line_start}"
 
-            # Skip if it's in a code block (common for AI responses explaining dangerous code)
-            # Check if the match is inside triple-backtick delimited block
-            before = text[:match.start()]
-            code_blocks_before = before.count("```")
-            if code_blocks_before % 2 == 1:
-                continue  # inside a code block
-
+            # NOTE: we deliberately do NOT skip matches inside fenced code blocks.
+            # AI delivers dangerous commands inside ``` fences more often than
+            # anywhere else — that's the primary attack surface. Skipping code
+            # blocks would skip exactly the command the user is about to run.
             yield Finding(
                 severity=severity,
                 category=category,

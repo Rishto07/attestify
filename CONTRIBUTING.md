@@ -36,19 +36,24 @@ class MyChecker(Checker):
         )
 ```
 
-### Adding Test Cases
+### Adding Eval Cases
 
-Add test cases to `src/verdict/evals.py` in the `GOLDEN_CASES` list:
+The eval corpus lives in `evals/data/*.json` — data, not code, so anyone can contribute a case. Pick the right file:
 
-```python
+- `quarantine.json` — dangerous-pattern detection. `expected` is FAIL (danger) / PASS (safe) / UNKNOWN (caution).
+- `execute_proof.json` — code-execution verification. `expected` is PASS / FAIL / UNKNOWN.
+- `prosecutor.json` — judge reliability. `truth` is `true` (statement is correct) / `false` (statement is wrong).
+
+```json
 {
-    "id": "my-001",
-    "category": "my_category",
-    "description": "What I'm testing",
-    "input": "The AI output to test",
-    "expected": "PASS",  # or FAIL or UNKNOWN
+  "id": "my-001",
+  "input": "The AI output to test",
+  "expected": "FAIL",
+  "note": "what makes this a good case"
 }
 ```
+
+Include **false-positive traps** (safe commands that must NOT be flagged) — a trust tool that wrongly blocks innocent commands is as bad as one that misses danger.
 
 ## Development Setup
 

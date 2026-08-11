@@ -174,16 +174,24 @@ The receipt is:
 
 ## Evaluation
 
-We measure everything. The eval corpus lives in `src/verdict/evals.py`:
+A trust tool must prove its own accuracy — we publish the numbers, not promises.
 
 ```bash
-python -m verdict.evals
+verdict evals                 # offline: quarantine + execute_proof
+verdict evals --prosecutor    # + judge reliability (uses your .env model)
+verdict evals --json          # machine-readable
 ```
 
-Current metrics on the golden set:
-- Quarantine: detecting dangerous patterns with high precision
-- ExecuteProof: running code to verify correctness
-- Combined: PASS/FAIL/UNKNOWN aggregation
+The corpus lives in `evals/data/*.json` — **data, not code** — so anyone can contribute a case, including false-positive traps (safe commands that must NOT be flagged).
+
+Metrics we track, per dataset:
+
+| Metric | What it means | Trust killer it catches |
+|--------|---------------|-------------------------|
+| precision | of things we flagged, how many were actually dangerous | wrongly blocking innocent commands |
+| recall | of real dangers, how many we caught | letting danger through |
+| false-positive rate | safe stuff wrongly flagged | user stops trusting us |
+| false-negative rate | danger that slipped through | user gets hurt |
 
 ## Roadmap
 

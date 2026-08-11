@@ -32,3 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sandbox test suite (Docker flood, fallback behavior, timeout mapping, command hardening)
 - **LLM client hardening**: retry with backoff on transient 5xx/429, graceful provider-error surfacing, configurable timeout via `VERDICT_LLM_TIMEOUT`
 - Cloudflare User-Agent bypass (Python-urllib UA was being blocked)
+- **Expanded eval corpus**: 88 cases across three datasets (`evals/data/*.json`) with honest metrics — precision, recall, F1, false-positive/false-negative rates
+- **`verdict evals` command** with `--prosecutor` (judge reliability) and `--json` output
+- **Evaluation-driven detector fixes** (the corpus found the bugs): code-block skip removed (was missing `curl|bash` in fences), setuid regex bug, `rm -rf /`, `~/.aws/` exfil, python exfil, cron-pipe, python3 http.server, symlink false-positive — quarantine went from 48% to 100% recall
