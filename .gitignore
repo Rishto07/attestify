@@ -29,3 +29,6 @@ verdict-data/
 
 # Sandbox artifacts from curl demos
 file.txt
+
+# Secrets — API keys. Never commit. See .env.example.
+.env

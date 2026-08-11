@@ -157,6 +157,8 @@ The receipt is:
 | `VERDICT_DATA_DIR` | Receipt storage directory | ./verdict-data |
 | `VERDICT_SANDBOX` | Code isolation: `docker` / `subprocess` | auto |
 
+**Your API key stays on your machine.** Copy `.env.example` to `.env` and fill it in — Verdict reads it automatically, and the file is git-ignored, so the key is never committed.
+
 ## Evaluation
 
 We measure everything. The eval corpus lives in `src/verdict/evals.py`:

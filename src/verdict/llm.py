@@ -180,12 +180,18 @@ class MockLLM(VerdictLLM):
 def get_llm() -> VerdictLLM:
     """Auto-detect the best available LLM client.
 
+    Secrets come from the real environment first, then a local .env file
+    (which the CLI also loads at startup — this covers library use).
+
     Priority:
     1. VERDICT_LLM_URL set → OpenAIClient
     2. VERDICT_LLM_PROVIDER=ollama → OpenAIClient pointing at localhost
     3. Otherwise → MockLLM (failsafe)
     """
     import os
+    from .env import load_dotenv
+
+    load_dotenv()
     url = os.environ.get("VERDICT_LLM_URL", "")
     if url:
         return OpenAIClient()

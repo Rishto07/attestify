@@ -252,6 +252,12 @@ def cmd_history(args: argparse.Namespace) -> int:
 
 
 def main():
+    # Load secrets from a local .env (real environment wins). Called before any
+    # parser code so the token is available to every subcommand.
+    from .env import load_dotenv
+
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         prog="verdict",
         description="The trust layer for AI output. Accept nothing on faith.",
