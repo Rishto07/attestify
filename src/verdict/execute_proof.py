@@ -1,41 +1,27 @@
 """ExecuteProof: deterministic verification by actually running the code.
 
-This checker takes code from the AI output, runs it in an isolated subprocess,
+This checker takes code from the AI output, runs it inside a *sandbox*,
 and verifies it:
 1. Executes without crashing (exit code 0)
-2. Produces the expected output (if the AI claimed specific output)
+2. Produces the expected output
 3. Doesn't hang (timeout enforced)
-4. Doesn't write to unexpected locations (sandboxed)
+4. Runs inside a real boundary when available (see ``sandbox.py``)
 
-Design rule: this is NOT a security sandbox. It's an *execution verifier*.
-The subprocess runs with the same permissions as the user — if you run it
-as root, it has root. The quarantine module handles the "is this dangerous?"
-question. This module handles the "does this code actually work?" question.
+Honesty rule: the checker always reports *which* sandbox it used and whether
+that sandbox was isolated. A PASS from the subprocess fallback is a real PASS
+about correctness — but the receipt must make it impossible to mistake that
+for "safe to run". The Quarantine checker owns "is this dangerous?"; this
+checker owns "does this code actually work?".
 """
 
 from __future__ import annotations
 
 import re
-import subprocess
-import tempfile
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from .core import Checker, CheckContext, Evidence, VerdictValue
-
-
-@dataclass
-class ExecutionResult:
-    """What happened when we tried to run the code."""
-
-    success: bool
-    exit_code: int | None
-    stdout: str
-    stderr: str
-    duration_ms: float
-    timed_out: bool = False
-    error: str | None = None
+from .sandbox import ExecutionResult, Sandbox, SubprocessSandbox, get_sandbox
 
 
 # === CODE EXTRACTORS ===
@@ -132,194 +118,37 @@ def detect_language(code: str) -> str:
     return "text"
 
 
-# === EXECUTORS ===
+# === BACKWARD-COMPAT EXECUTORS (thin wrappers, not isolated) ===
+# Kept so `from verdict.execute_proof import run_python` still works.
+# New code should use a Sandbox instance via ExecuteProofChecker.
 
 def run_python(code: str, timeout: float, workdir: Optional[Path] = None) -> ExecutionResult:
-    """Run Python code in a subprocess."""
-    import time
-    start = time.perf_counter()
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, dir=workdir) as f:
-        f.write(code)
-        f.flush()
-        tmp_path = f.name
-
-    try:
-        proc = subprocess.run(
-            ["python", tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=workdir,
-        )
-        return ExecutionResult(
-            success=proc.returncode == 0,
-            exit_code=proc.returncode,
-            stdout=proc.stdout,
-            stderr=proc.stderr,
-            duration_ms=(time.perf_counter() - start) * 1000,
-        )
-    except subprocess.TimeoutExpired:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr="Process timed out",
-            duration_ms=timeout * 1000,
-            timed_out=True,
-        )
-    except FileNotFoundError:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr="Python interpreter not found",
-            duration_ms=0,
-            error="python not in PATH",
-        )
-    except Exception as e:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr=str(e),
-            duration_ms=0,
-            error=str(e),
-        )
-    finally:
-        try:
-            Path(tmp_path).unlink()
-        except FileNotFoundError:
-            pass
+    return SubprocessSandbox().run("python", code, timeout, workdir)
 
 
 def run_shell(code: str, timeout: float, workdir: Optional[Path] = None) -> ExecutionResult:
-    """Run shell script in a subprocess."""
-    import time
-    start = time.perf_counter()
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False, dir=workdir) as f:
-        f.write("#!/bin/sh\n" + code)
-        f.flush()
-        tmp_path = f.name
-
-    try:
-        proc = subprocess.run(
-            ["sh", tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=workdir,
-        )
-        return ExecutionResult(
-            success=proc.returncode == 0,
-            exit_code=proc.returncode,
-            stdout=proc.stdout,
-            stderr=proc.stderr,
-            duration_ms=(time.perf_counter() - start) * 1000,
-        )
-    except subprocess.TimeoutExpired:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr="Process timed out",
-            duration_ms=timeout * 1000,
-            timed_out=True,
-        )
-    except FileNotFoundError:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr="sh interpreter not found",
-            duration_ms=0,
-            error="sh not in PATH",
-        )
-    except Exception as e:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr=str(e),
-            duration_ms=0,
-            error=str(e),
-        )
-    finally:
-        try:
-            Path(tmp_path).unlink()
-        except FileNotFoundError:
-            pass
+    return SubprocessSandbox().run("bash", code, timeout, workdir)
 
 
 def run_javascript(code: str, timeout: float, workdir: Optional[Path] = None) -> ExecutionResult:
-    """Run JavaScript code using node."""
-    import time
-    start = time.perf_counter()
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False, dir=workdir) as f:
-        f.write(code)
-        f.flush()
-        tmp_path = f.name
-
-    try:
-        proc = subprocess.run(
-            ["node", tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=workdir,
-        )
-        return ExecutionResult(
-            success=proc.returncode == 0,
-            exit_code=proc.returncode,
-            stdout=proc.stdout,
-            stderr=proc.stderr,
-            duration_ms=(time.perf_counter() - start) * 1000,
-        )
-    except subprocess.TimeoutExpired:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr="Process timed out",
-            duration_ms=timeout * 1000,
-            timed_out=True,
-        )
-    except FileNotFoundError:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr="node interpreter not found",
-            duration_ms=0,
-            error="node not in PATH",
-        )
-    except Exception as e:
-        return ExecutionResult(
-            success=False,
-            exit_code=None,
-            stdout="",
-            stderr=str(e),
-            duration_ms=0,
-            error=str(e),
-        )
-    finally:
-        try:
-            Path(tmp_path).unlink()
-        except FileNotFoundError:
-            pass
+    return SubprocessSandbox().run("javascript", code, timeout, workdir)
 
 
 # === MAIN CHECKER ===
 
 class ExecuteProofChecker(Checker):
-    """Verify code by actually running it."""
+    """Verify code by actually running it inside a sandbox."""
 
     name = "execute_proof"
     weight = 1.0
 
+    def __init__(self, sandbox: Optional[Sandbox] = None):
+        # An explicit sandbox wins; otherwise ctx.sandbox wins; otherwise auto.
+        self._sandbox = sandbox
+
     def check(self, output: str, ctx: CheckContext) -> Evidence:
+        sandbox = self._sandbox or ctx.sandbox or get_sandbox()
+
         blocks = extract_code_blocks(output)
 
         if not blocks:
@@ -331,22 +160,13 @@ class ExecuteProofChecker(Checker):
                 weight=self.weight * 0.5,
             )
 
-        # Workdir: use ctx.workdir if provided, otherwise temp
         workdir = Path(ctx.workdir) if ctx.workdir else None
 
-        results = []
+        results: list[tuple[str, Optional[ExecutionResult]]] = []
         for lang, code in blocks:
             lang = detect_language(code) if lang == "text" else lang
-
-            if lang == "python":
-                results.append(("python", run_python(code, ctx.timeout, workdir)))
-            elif lang in {"bash", "shell", "sh"}:
-                results.append(("bash", run_shell(code, ctx.timeout, workdir)))
-            elif lang == "javascript":
-                results.append(("javascript", run_javascript(code, ctx.timeout, workdir)))
-            else:
-                # Skip unknown languages
-                results.append((lang, None))
+            result = sandbox.run(lang, code, ctx.timeout, workdir)
+            results.append((lang, result))
 
         # Analyze results
         executed = [(l, r) for l, r in results if r is not None]
@@ -354,16 +174,16 @@ class ExecuteProofChecker(Checker):
             return Evidence(
                 checker=self.name,
                 conclusion=VerdictValue.UNKNOWN,
-                detail="Found code but couldn't execute (unknown language).",
-                data={"languages": [l for l, _ in blocks]},
+                detail=f"Found code but couldn't execute (unsupported language / sandbox). Sandbox: {sandbox.name}",
+                data={"languages": [l for l, _ in blocks], "sandbox": sandbox.name},
                 weight=self.weight * 0.5,
             )
 
         successful = sum(1 for _, r in executed if r.success)
         failed = sum(1 for _, r in executed if r and not r.success)
         timed_out = sum(1 for _, r in executed if r and r.timed_out)
-
         total_duration = sum(r.duration_ms for _, r in executed)
+        isolated = all(r.isolated for _, r in executed) if executed else False
 
         data = {
             "blocks_executed": len(executed),
@@ -371,6 +191,8 @@ class ExecuteProofChecker(Checker):
             "failed": failed,
             "timed_out": timed_out,
             "total_duration_ms": total_duration,
+            "sandbox": sandbox.name,
+            "isolated": isolated,
             "results": [
                 {
                     "language": lang,
@@ -379,22 +201,25 @@ class ExecuteProofChecker(Checker):
                     "stdout": r.stdout[:500] if r else None,
                     "stderr": r.stderr[:500] if r else None,
                     "timed_out": r.timed_out if r else False,
+                    "isolated": r.isolated if r else False,
                 }
                 for lang, r in executed
             ],
         }
 
+        isolation_note = "isolated" if isolated else "NOT isolated (subprocess)"
+
         if failed > 0 or timed_out > 0:
-            # Find the first failure for detail
             first_fail = next((r for _, r in executed if r and not r.success), None)
             if first_fail:
-                detail = f"FAIL: code block exited with code {first_fail.exit_code}"
                 if first_fail.timed_out:
-                    detail = f"FAIL: code block timed out after {ctx.timeout}s"
-                if first_fail.error:
-                    detail = f"FAIL: {first_fail.error}"
+                    detail = f"FAIL: code block timed out after {ctx.timeout}s [{isolation_note}]"
+                elif first_fail.error:
+                    detail = f"FAIL: {first_fail.error} [{isolation_note}]"
+                else:
+                    detail = f"FAIL: code block exited with code {first_fail.exit_code} [{isolation_note}]"
             else:
-                detail = f"FAIL: {failed} block(s) failed, {timed_out} timed out"
+                detail = f"FAIL: {failed} block(s) failed, {timed_out} timed out [{isolation_note}]"
             return Evidence(
                 checker=self.name,
                 conclusion=VerdictValue.FAIL,
@@ -406,7 +231,7 @@ class ExecuteProofChecker(Checker):
         return Evidence(
             checker=self.name,
             conclusion=VerdictValue.PASS,
-            detail=f"PASS: {successful}/{len(executed)} code block(s) executed successfully ({total_duration:.0f}ms)",
+            detail=f"PASS: {successful}/{len(executed)} code block(s) ran successfully ({total_duration:.0f}ms) [{isolation_note}]",
             data=data,
             weight=self.weight,
         )

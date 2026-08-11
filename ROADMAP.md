@@ -22,10 +22,13 @@
 
 ## v0.3.0 — Sandboxing
 
-- [ ] Docker-based ExecuteProof sandbox
-- [ ] Network isolation for code execution
-- [ ] Filesystem restrictions
-- [ ] Resource limits (CPU, memory)
+- [x] Docker-based ExecuteProof sandbox (no network, read-only FS, non-root, caps dropped)
+- [x] Network isolation for code execution
+- [x] Filesystem restrictions (read-only mount)
+- [x] Resource limits (CPU 0.5, memory 128m, pids 32)
+- [x] Hard timeout via container `timeout` + outer safety net
+- [x] Honest fallback to subprocess with `isolated: false` recorded in receipts
+- [ ] Configurable resource limits via env vars
 
 ## v0.4.0 — Integrations
 

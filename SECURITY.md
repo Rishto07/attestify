@@ -29,7 +29,12 @@ We aim to respond within 48 hours.
 
 ### Sandboxing
 
-ExecuteProof runs code in a subprocess with the same permissions as the user. It is NOT a security sandbox — it verifies *correctness*, not safety. The Quarantine module handles the safety question.
+ExecuteProof runs code inside a **sandbox with two backends**:
+
+- **Docker (isolated):** container with no network, read-only filesystem, root dropped (`--user nobody`), all Linux capabilities dropped, memory/CPU/pids capped, hard timeout, and `no-new-privileges`. This is the production boundary.
+- **Subprocess (fallback):** runs with the same permissions as the user. It is **NOT** a security boundary — it verifies *correctness*, not safety.
+
+Verdict never conflates the two: every result, every receipt, records `isolated: true|false`. A PASS from the subprocess fallback is a PASS about whether the code works, never a claim that it is safe to run. The Quarantine module handles the safety question.
 
 ## Verification
 

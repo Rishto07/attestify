@@ -18,3 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI with subcommands: check, quarantine, execute, receipt, stats
 - Evaluation harness with golden dataset
 - Test suite (core, quarantine, execute_proof, llm, store)
+
+## [0.1.1] - Unreleased
+
+### Added
+- **Sandbox module** — code execution is now a real boundary, not a bare subprocess
+  - `DockerSandbox`: no network, read-only filesystem, root dropped, caps dropped,
+    memory/CPU/pids limits, hard timeout
+  - `SubprocessSandbox`: explicit fallback — `isolated: False`, never labeled as safe
+  - `get_sandbox()` factory with `VERDICT_SANDBOX` env override
+  - `--sandbox {auto,docker,subprocess}` CLI flag on `check` and `execute`
+  - Received evidence now records `sandbox` name and `isolated` flag
+- Sandbox test suite (Docker flood, fallback behavior, timeout mapping, command hardening)

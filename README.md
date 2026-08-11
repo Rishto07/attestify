@@ -36,6 +36,27 @@ Verdict is an open trust layer for AI output:
 pip install verdict
 ```
 
+## The Sandbox
+
+When Verdict runs code to prove it works, it runs that code **inside a boundary**, not on your machine:
+
+| Setting | Docker (isolated) | Subprocess (fallback) |
+|---------|-------------------|------------------------|
+| Network | ❌ none | same as your user |
+| Filesystem | ❌ read-only | same as your user |
+| Root | ❌ dropped (nobody) | same as your user |
+| Memory / CPU | capped (128m / 0.5 CPU) | unlimited |
+| Process limit | 32 | unlimited |
+
+Verdict auto-selects: **Docker** when it's available, otherwise the **subprocess fallback** — and it *always* says which one ran, in the CLI and in the receipt. A PASS from the fallback is a PASS about correctness, never a claim of safety.
+
+```bash
+verdict check --sandbox docker "...."   # force isolated
+verdict check --sandbox subprocess ".." # force fallback (NOT isolated)
+```
+
+Set `VERDICT_SANDBOX=subprocess` in your environment to default to the fallback.
+
 ## Quick Start
 
 ### CLI
@@ -91,7 +112,8 @@ verdict/
 ├── core/          # Data model: Evidence, Verdict, Receipt, Checker protocol
 ├── checkers/      # Pluggable verification modules
 │   ├── quarantine/   # Static scan for dangerous patterns
-│   ├── execute_proof/ # Run code to verify it works
+│   ├── execute_proof/ # Run code inside a sandbox to verify it works
+│   ├── sandbox/      # Docker (isolated) / subprocess (fallback) boundaries
 │   └── prosecutor/   # Adversarial LLM pass
 ├── storage/       # Receipt store (JSONL)
 └── evals/         # Evaluation harness
@@ -101,7 +123,7 @@ verdict/
 
 1. **Quarantine** — Static analysis that catches shell injection, file exfiltration, persistence attacks, and obfuscation. Runs in milliseconds, needs no model.
 
-2. **ExecuteProof** — Extracts code from the output and actually runs it in a subprocess. Verifies exit code, output, and timeout. Deterministic.
+2. **ExecuteProof** — Extracts code from the output and actually runs it inside a **sandbox** (Docker when available, otherwise an explicitly-labeled subprocess fallback). Verifies exit code, output, and timeout. Deterministic. The receipt always records which sandbox ran and whether it was isolated.
 
 3. **Prosecutor** — An adversarial LLM pass that tries to refute the output. Uses a *different* prompt than the original generation, making it a real second opinion. Runs only when configured (extra LLM call).
 
@@ -133,6 +155,7 @@ The receipt is:
 | `VERDICT_LLM_KEY` | API key | none |
 | `VERDICT_LLM_MODEL` | Model for prosecutor | gpt-4o-mini |
 | `VERDICT_DATA_DIR` | Receipt storage directory | ./verdict-data |
+| `VERDICT_SANDBOX` | Code isolation: `docker` / `subprocess` | auto |
 
 ## Evaluation
 

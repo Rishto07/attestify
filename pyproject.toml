@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verdict"
-version = "0.1.0"
+version = "0.1.1"
 description = "The trust layer for AI output. Accept nothing on faith: verify with proof, prosecute with an adversary, quarantine before it can hurt you."
 readme = "README.md"
 requires-python = ">=3.10"

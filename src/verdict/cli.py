@@ -28,6 +28,7 @@ from .execute_proof import ExecuteProofChecker
 from .llm import get_llm
 from .prosecutor import ProsecutorChecker, GroundTruthChecker
 from .quarantine import QuarantineChecker
+from .sandbox import DockerSandbox, get_sandbox
 from .storage import ReceiptStore
 
 
@@ -84,12 +85,16 @@ def cmd_check(args: argparse.Namespace) -> int:
     if args.prosecutor or args.advanced:
         llm = get_llm()
 
+    # Choose sandbox (auto / docker / subprocess) and say what we got
+    sandbox = get_sandbox(getattr(args, "sandbox", None))
+
     # Build context
     ctx = CheckContext(
         timeout=args.timeout,
         llm=llm,
         model=args.model,
         workdir=args.workdir,
+        sandbox=sandbox,
     )
 
     # Select checkers
@@ -108,6 +113,8 @@ def cmd_check(args: argparse.Namespace) -> int:
     print("Verdict Check")
     print(f"{'='*60}")
     print(f"Checkers: {[c.name for c in checkers]}")
+    sandbox_label = "isolated" if isinstance(sandbox, DockerSandbox) else "NOT isolated"
+    print(f"Sandbox:  {sandbox.name} ({sandbox_label})")
     if llm:
         print(f"LLM: {ctx.model or 'default'}")
     print()
@@ -176,10 +183,13 @@ def cmd_execute(args: argparse.Namespace) -> int:
     else:
         output = args.output or ""
 
-    ctx = CheckContext(timeout=args.timeout, workdir=args.workdir)
+    sandbox = get_sandbox(getattr(args, "sandbox", None))
+    ctx = CheckContext(timeout=args.timeout, workdir=args.workdir, sandbox=sandbox)
     checker = ExecuteProofChecker()
     evidence = checker.check(output, ctx)
 
+    sandbox_label = "isolated" if isinstance(sandbox, DockerSandbox) else "NOT isolated"
+    print(f"Sandbox: {sandbox.name} ({sandbox_label})")
     symbol = "[PASS]" if evidence.conclusion == VerdictValue.PASS else "[FAIL]"
     print(f"{symbol} execute_proof: {evidence.detail}")
     print(json.dumps(evidence.data, indent=2))
@@ -263,6 +273,7 @@ def main():
     check_parser.add_argument("--timeout", type=float, default=10.0, help="Timeout for code execution (seconds)")
     check_parser.add_argument("--model", help="LLM model to use")
     check_parser.add_argument("--workdir", help="Working directory for execution")
+    check_parser.add_argument("--sandbox", choices=["auto", "docker", "subprocess"], default=None, help="Code sandbox: docker (isolated), subprocess (NOT isolated), auto (default)")
     check_parser.add_argument("-s", "--save-receipt", action="store_true", default=True, help="Save receipt (default: true)")
     check_parser.add_argument("--show-receipt", action="store_true", help="Show receipt JSON after check")
     check_parser.set_defaults(func=cmd_check)
@@ -281,6 +292,7 @@ def main():
     exec_parser.add_argument("--stdin", action="store_true", help="Read output from stdin")
     exec_parser.add_argument("--timeout", type=float, default=10.0, help="Timeout for code execution")
     exec_parser.add_argument("--workdir", help="Working directory")
+    exec_parser.add_argument("--sandbox", choices=["auto", "docker", "subprocess"], default=None, help="Code sandbox: docker (isolated), subprocess (NOT isolated), auto (default)")
     exec_parser.set_defaults(func=cmd_execute)
 
     # verdict receipt

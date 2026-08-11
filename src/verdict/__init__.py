@@ -25,9 +25,10 @@ from .execute_proof import ExecuteProofChecker
 from .llm import get_llm
 from .prosecutor import ProsecutorChecker, GroundTruthChecker
 from .quarantine import QuarantineChecker
+from .sandbox import DockerSandbox, Sandbox, SubprocessSandbox, get_sandbox
 from .storage import ReceiptStore
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "Checker",
@@ -40,6 +41,10 @@ __all__ = [
     "ProsecutorChecker",
     "GroundTruthChecker",
     "QuarantineChecker",
+    "DockerSandbox",
+    "SubprocessSandbox",
+    "Sandbox",
+    "get_sandbox",
     "get_llm",
     "ReceiptStore",
     "run_verdict",
@@ -52,6 +57,7 @@ def run_verdict(
     llm=None,
     timeout: float = 10.0,
     model: str | None = None,
+    sandbox=None,
 ) -> Verdict:
     """Run verdict on the given output.
 
@@ -61,6 +67,7 @@ def run_verdict(
         llm: LLM client for prosecutor (optional)
         timeout: Timeout for execution checks
         model: Model name for LLM
+        sandbox: Sandbox instance to run code in (default: auto-selected)
 
     Returns:
         Verdict object with value, confidence, summary, and evidence
@@ -74,6 +81,7 @@ def run_verdict(
         timeout=timeout,
         llm=llm,
         model=model,
+        sandbox=sandbox,
     )
 
     evidence = []

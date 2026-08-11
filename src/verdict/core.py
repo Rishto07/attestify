@@ -236,11 +236,15 @@ class CheckContext:
         llm: Optional["VerdictLLM"] = None,
         model: Optional[str] = None,
         workdir: Optional[str] = None,
+        sandbox: Optional[Any] = None,
     ) -> None:
         self.timeout = timeout
         self.llm = llm
         self.model = model
         self.workdir = workdir
+        # A Sandbox instance (verdict.sandbox). Kept as Any to avoid a hard
+        # import cycle from core -> sandbox; the protocol is duck-typed.
+        self.sandbox = sandbox
 
 
 class Checker(abc.ABC):
