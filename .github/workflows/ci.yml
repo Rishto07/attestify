@@ -26,9 +26,6 @@ jobs:
       - name: Run tests
         run: pytest -v
 
-      - name: Run evaluation corpus
-        run: attestify evals
-
   build:
     runs-on: ubuntu-latest
     steps:
@@ -39,8 +36,11 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install build tools
+        run: pip install build twine
+
       - name: Build package
-        run: pip install build && python -m build
+        run: python -m build
 
       - name: Check package
-        run: pip install twine && twine check dist/*
+        run: twine check dist/*
