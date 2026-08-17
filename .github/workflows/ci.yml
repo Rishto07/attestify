@@ -27,7 +27,7 @@ jobs:
         run: pytest -v
 
       - name: Run evaluation corpus
-        run: attestify evals --fast
+        run: attestify evals
 
   build:
     runs-on: ubuntu-latest
